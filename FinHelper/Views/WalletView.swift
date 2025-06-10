@@ -4,7 +4,7 @@ struct WalletView: View {
     @ObservedObject var viewModel: MainViewModel
     @State private var showingAddExpense = false
     @State private var showingExpenseDetail = false
-    @State private var selectedExpense: ExpenseRow.Data?
+    @State private var selectedExpense: Expense?
     
     var body: some View {
         NavigationView {
@@ -57,29 +57,13 @@ struct WalletView: View {
                 List {
                         ForEach(viewModel.expenses) { expense in
                             Button(action: {
-                                selectedExpense = ExpenseRow.Data(
-                                    id: expense.id,
-                                    title: expense.title,
-                                    amount: expense.amount,
-                                    date: expense.formattedDate,
-                                    icon: expense.category.icon,
-                                    category: expense.category
-                                )
-                                showingExpenseDetail = true
+                                selectedExpense = expense
                             }) {
-                                ExpenseRow(data: ExpenseRow.Data(
-                                    id: expense.id,
-                                    title: expense.title,
-                                    amount: expense.amount,
-                                    date: expense.formattedDate,
-                                    icon: expense.category.icon,
-                                    category: expense.category
-                                ))
+                                ExpenseRow(expense: expense)
                             }
-                            .buttonStyle(PlainButtonStyle())
                     }
                     .onDelete { indexSet in
-                            viewModel.deleteExpense(at: indexSet)
+                            deleteExpenses(at: indexSet)
                         }
                     }
                 }
@@ -92,45 +76,44 @@ struct WalletView: View {
             )
         }
         .sheet(isPresented: $showingAddExpense) {
-            WalletAddExpenseView(viewModel: viewModel)
-                .presentationDetents([.medium])
-        }
-        .sheet(isPresented: $showingExpenseDetail, onDismiss: {
-            selectedExpense = nil // Sheet kapandığında seçili harcamayı sıfırla
-        }) {
-            if let expense = selectedExpense {
-                ExpenseDetailView(expense: expense, viewModel: viewModel)
+            NavigationView {
+                WalletAddExpenseView(viewModel: viewModel)
             }
+        }
+        .sheet(item: $selectedExpense) { expense in
+            NavigationView {
+                ExpenseDetailView(expense: expense, viewModel: viewModel) {
+                    selectedExpense = nil
+                }
+            }
+        }
+    }
+    
+    private func deleteExpenses(at offsets: IndexSet) {
+        for index in offsets {
+            let expense = viewModel.expenses[index]
+            viewModel.deleteExpense(expense)
         }
     }
 }
 
 // Harcama satırı bileşeni
 struct ExpenseRow: View {
-    struct Data: Identifiable {
-        let id: UUID
-        let title: String
-        let amount: Double
-        let date: String
-        let icon: String
-        let category: ExpenseCategory
-    }
-    
-    let data: Data
+    let expense: Expense
     
     var body: some View {
         HStack {
-            Text(data.icon)
+            Text(expense.category.icon)
                 .font(.title)
             VStack(alignment: .leading) {
-                Text(data.title)
+                Text(expense.title)
                     .font(.headline)
-                Text(data.date)
+                Text(expense.formattedDate)
                     .font(.caption)
                     .foregroundColor(.gray)
             }
             Spacer()
-            Text("₺\(String(format: "%.2f", data.amount))")
+            Text("₺\(String(format: "%.2f", expense.amount))")
                 .font(.headline)
         }
         .padding(.vertical, 8)
@@ -139,30 +122,30 @@ struct ExpenseRow: View {
 
 // Harcama detay görünümü
 struct ExpenseDetailView: View {
-    @Environment(\.dismiss) private var dismiss
-    let expense: ExpenseRow.Data
+    let expense: Expense
     @ObservedObject var viewModel: MainViewModel
+    let onDismiss: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var amount: String
     @State private var selectedCategory: ExpenseCategory
     
-    init(expense: ExpenseRow.Data, viewModel: MainViewModel) {
+    init(expense: Expense, viewModel: MainViewModel, onDismiss: @escaping () -> Void) {
         self.expense = expense
         self.viewModel = viewModel
+        self.onDismiss = onDismiss
+        
+        // State değişkenlerini başlangıç değerleriyle ayarla
         _title = State(initialValue: expense.title)
         _amount = State(initialValue: String(format: "%.2f", expense.amount))
         _selectedCategory = State(initialValue: expense.category)
     }
     
     var body: some View {
-        NavigationView {
             Form {
                 Section(header: Text("Harcama Detayları")) {
-                    HStack {
-                        Text(selectedCategory.icon)
-                            .font(.title)
                         TextField("Başlık", text: $title)
-                    }
                     
                     HStack {
                         Text("₺")
@@ -170,20 +153,13 @@ struct ExpenseDetailView: View {
                             .keyboardType(.decimalPad)
                     }
                     
-                    Picker("Kategori", selection: $selectedCategory) {
-                        ForEach(ExpenseCategory.allCases, id: \.self) { category in
-                            HStack {
-                                Text(category.icon)
-                                Text(category.rawValue)
-                            }.tag(category)
-                        }
-                    }
-                    
+                Picker("Kategori", selection: $selectedCategory) {
+                    ForEach(ExpenseCategory.allCases, id: \.self) { category in
                     HStack {
-                        Text("Tarih")
-                        Spacer()
-                        Text(expense.date)
-                            .foregroundColor(.gray)
+                            Text(category.icon)
+                            Text(category.rawValue)
+                        }.tag(category)
+                    }
                     }
                 }
                 
@@ -193,6 +169,12 @@ struct ExpenseDetailView: View {
                             .frame(maxWidth: .infinity)
                             .foregroundColor(.blue)
                     }
+                
+                Button(action: deleteExpense) {
+                    Text("Harcamayı Sil")
+                        .frame(maxWidth: .infinity)
+                        .foregroundColor(.red)
+                }
                 }
             }
             .navigationTitle("Harcama Düzenle")
@@ -201,22 +183,29 @@ struct ExpenseDetailView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Vazgeç") {
                         dismiss()
-                    }
                 }
             }
         }
-        .presentationDetents([.medium])
     }
     
     private func saveChanges() {
-        if let newAmount = Double(amount) {
-            viewModel.updateExpense(
-                id: expense.id,
-                title: title,
-                amount: newAmount,
-                category: selectedCategory
-            )
-        }
+        guard let amountValue = Double(amount) else { return }
+        
+        var updatedExpense = expense
+        updatedExpense.title = title
+        updatedExpense.amount = amountValue
+        updatedExpense.category = selectedCategory
+        
+        // Harcamayı güncelle
+        viewModel.updateExpense(updatedExpense)
+        
         dismiss()
+        onDismiss()
+    }
+    
+    private func deleteExpense() {
+        viewModel.deleteExpense(expense)
+        dismiss()
+        onDismiss()
     }
 } 

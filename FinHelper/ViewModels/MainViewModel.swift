@@ -7,6 +7,7 @@ class MainViewModel: ObservableObject {
     @Published var groups: [Group] = []
     @Published var selectedGroup: Group?
     @Published var expenses: [Expense] = []
+    @Published var personalExpenses: [Expense] = []
     
     var totalExpenses: Double? {
         guard !expenses.isEmpty else { return nil }
@@ -25,6 +26,7 @@ class MainViewModel: ObservableObject {
         // Kullanıcının harcamalarını yükle
         loadExpenses()
         loadGroups()
+        loadPersonalExpenses()
         
         // Uygulama ilk açıldığında selectedGroup'u sıfırla
         selectedGroup = nil
@@ -48,31 +50,38 @@ class MainViewModel: ObservableObject {
     }
     
     func addExpense(title: String, amount: Double, category: ExpenseCategory) {
-        let newExpense = Expense(
+        let expense = Expense(
             title: title,
             amount: amount,
             date: Date(),
             category: category,
             userId: currentUser.id
         )
-        expenses.append(newExpense)
+        expenses.append(expense)
+        // Kişisel harcamalara da ekle
+        personalExpenses.append(expense)
         saveExpenses()
+        savePersonalExpenses()
     }
     
-    func updateExpense(id: UUID, title: String, amount: Double, category: ExpenseCategory) {
-        if let index = expenses.firstIndex(where: { $0.id == id }) {
-            var updatedExpense = expenses[index]
-            updatedExpense.title = title
-            updatedExpense.amount = amount
-            updatedExpense.category = category
-            expenses[index] = updatedExpense
+    func updateExpense(_ expense: Expense) {
+        if let index = expenses.firstIndex(where: { $0.id == expense.id }) {
+            expenses[index] = expense
+            // Kişisel harcamalarda da güncelle
+            if let personalIndex = personalExpenses.firstIndex(where: { $0.id == expense.id }) {
+                personalExpenses[personalIndex] = expense
+            }
             saveExpenses()
+            savePersonalExpenses()
         }
     }
     
-    func deleteExpense(at indexSet: IndexSet) {
-        expenses.remove(atOffsets: indexSet)
+    func deleteExpense(_ expense: Expense) {
+        expenses.removeAll { $0.id == expense.id }
+        // Kişisel harcamalardan da sil
+        personalExpenses.removeAll { $0.id == expense.id }
         saveExpenses()
+        savePersonalExpenses()
     }
     
     // MARK: - Group Operations
@@ -153,7 +162,43 @@ class MainViewModel: ObservableObject {
         // Kullanıcı verilerini temizle
         UserDefaults.standard.removeObject(forKey: "expenses_\(currentUser.id)")
         UserDefaults.standard.removeObject(forKey: "groups_\(currentUser.id)")
+        UserDefaults.standard.removeObject(forKey: "personalExpenses_\(currentUser.id)")
         expenses = []
         groups = []
+        personalExpenses = []
+    }
+    
+    // Kişisel harcama ekleme
+    func addPersonalExpense(title: String, amount: Double, category: ExpenseCategory) {
+        let expense = Expense(
+            title: title,
+            amount: amount,
+            date: Date(),
+            category: category,
+            userId: currentUser.id
+        )
+        personalExpenses.append(expense)
+        savePersonalExpenses()
+    }
+    
+    // Kişisel harcama silme
+    func deletePersonalExpense(_ expense: Expense) {
+        personalExpenses.removeAll { $0.id == expense.id }
+        savePersonalExpenses()
+    }
+    
+    // Kişisel harcamaları kaydetme
+    private func savePersonalExpenses() {
+        if let encoded = try? JSONEncoder().encode(personalExpenses) {
+            UserDefaults.standard.set(encoded, forKey: "personalExpenses_\(currentUser.id)")
+        }
+    }
+    
+    // Kişisel harcamaları yükleme
+    private func loadPersonalExpenses() {
+        if let data = UserDefaults.standard.data(forKey: "personalExpenses_\(currentUser.id)"),
+           let decoded = try? JSONDecoder().decode([Expense].self, from: data) {
+            personalExpenses = decoded
+        }
     }
 } 

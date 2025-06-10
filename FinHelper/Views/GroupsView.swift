@@ -62,7 +62,6 @@ struct GroupDetailView: View {
     @State private var showingAddExpense = false
     @State private var selectedTab = 0 // 0: Harcamalar, 1: Bakiyeler
     @State private var showingDebtDetail = false
-    @State private var showingExpenseDetail = false
     @State private var selectedExpense: Expense?
     
     var body: some View {
@@ -112,7 +111,6 @@ struct GroupDetailView: View {
                                     ForEach(expenses) { expense in
                                         ExpenseRowView(expense: expense) {
                                             selectedExpense = expense
-                                            showingExpenseDetail = true
                                         }
                                         .swipeActions(edge: .trailing) {
                                             Button(role: .destructive) {
@@ -157,9 +155,6 @@ struct GroupDetailView: View {
                     .background(Color.green)
                     .cornerRadius(12)
                     .padding(.horizontal)
-                    .onTapGesture {
-                        showingDebtDetail = true
-                    }
                     
                     Text("Bakiyeler")
                         .font(.headline)
@@ -199,8 +194,8 @@ struct GroupDetailView: View {
                                     // Borç miktarı ve ödeme butonu
                                     VStack(alignment: .trailing) {
                                         Text("₺\(debt, specifier: "%.2f")")
-                                            .font(.headline)
-                                            .foregroundColor(debt >= 0 ? .green : .red)
+                                        .font(.headline)
+                                        .foregroundColor(debt >= 0 ? .green : .red)
                                         
                                         if debt < 0 && member != viewModel.currentUser.name {
                                             Button(action: {
@@ -251,13 +246,13 @@ struct GroupDetailView: View {
         .sheet(isPresented: $showingAddExpense) {
             GroupAddExpenseView(viewModel: viewModel, group: group)
         }
-        .sheet(isPresented: $showingExpenseDetail) {
-            if let expense = selectedExpense {
+        .sheet(item: $selectedExpense) { expense in
+            NavigationView {
                 GroupExpenseDetailView(
                     expense: expense,
                     group: group,
                     viewModel: viewModel,
-                    onDismiss: { showingExpenseDetail = false }
+                    onDismiss: { selectedExpense = nil }
                 )
             }
         }

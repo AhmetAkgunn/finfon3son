@@ -20,7 +20,7 @@ enum ExpenseCategory: String, Codable, CaseIterable {
 }
 
 // Harcama modeli
-struct Expense: Identifiable, Codable {
+struct Expense: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     var amount: Double

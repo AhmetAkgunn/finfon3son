@@ -95,9 +95,20 @@ class AuthViewModel: ObservableObject {
     }
     
     func logout() {
+        // Çıkış yapılmadan önce mevcut kullanıcı ID'sini al
+        let currentUserId = currentUser?.id
+        
         UserDefaults.standard.removeObject(forKey: "authToken")
         UserDefaults.standard.removeObject(forKey: "currentUser")
         NetworkManager.shared.clearAuthToken()
+        
+        // Eğer kullanıcı ID'si varsa, o kullanıcıya ait tüm verileri temizle
+        if let userId = currentUserId {
+            UserDefaults.standard.removeObject(forKey: "expenses_\(userId)")
+            UserDefaults.standard.removeObject(forKey: "groups_\(userId)")
+            UserDefaults.standard.removeObject(forKey: "personalExpenses_\(userId)")
+        }
+        
         self.currentUser = nil
         self.isAuthenticated = false
     }
