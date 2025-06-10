@@ -157,7 +157,9 @@ struct GroupDetailView: View {
                     .background(Color.green)
                     .cornerRadius(12)
                     .padding(.horizontal)
-                    .allowsHitTesting(false)
+                    .onTapGesture {
+                        showingDebtDetail = true
+                    }
                     
                     Text("Bakiyeler")
                         .font(.headline)
